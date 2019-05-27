@@ -11,7 +11,7 @@ class VatConfigure(models.Model):
     code_name = fields.Char(string='VAT Name')
     tax_id = fields.Many2one('account.tax', string="Tax")
     tax_scope = fields.Selection(string="Scope", related='tax_id.type_tax_use')
-    description = fields.Char(string="Description")
+    description = fields.Text(string="Description")
 
 
 class VatFileReturn(models.Model):
@@ -20,7 +20,8 @@ class VatFileReturn(models.Model):
 
     name = fields.Char(string="Label")
     date = fields.Date(string="Date")
-    reference = fields.Many2one('account.invoice', string="Reference")
+    reference = fields.Many2one('account.invoice', string="Sales Reference")
+    purchase_reference = fields.Many2one('purchase.order', string="Purchases Reference")
     partner_id = fields.Many2one('res.partner', string="Partner")
     account_id = fields.Many2one('account.account', string="Account")
     tax_id = fields.Many2one('account.tax', string="Tax")
@@ -28,13 +29,18 @@ class VatFileReturn(models.Model):
     tax_amount = fields.Float(string="Tax Amount")
     vat_code_ref = fields.Many2one('vat.configuration', string='VAT Code')
     category = fields.Char(string='Category')
+    eligibility = fields.Selection([('true', 'Eligible'),('false', 'Ineligible')], string="Eligibility")
+    product_type = fields.Char(string="Product Type")
+    move_id = fields.Many2one('account.move', string="Journal")
+
 
 class IvoicesLine(models.Model):
     _inherit = 'account.invoice.line'
     _description = 'VAT line'
 
     vat_code_id = fields.Many2one('vat.configuration', string='VAT Code')
-
+    x_eligibility = fields.Selection([('true', 'Eligible'),
+                                      ('false', 'Ineligible')], string="VAT Eligibility")
     @api.onchange('vat_code_id')
     def get_tax_from_code(self):
         for record in self:
@@ -99,8 +105,12 @@ class Invoices(models.Model):
                     'vat_code_ref': move.vat_code_id.id,
                     'reference': record.id,
                     'date': record.date_invoice,
-                    'category': 'Sale'
+                    'category': 'Sale',
+                    'product_type': move.product_id.type,
+                    'account_id': move.account_id.id,
+                    'move_id': record.move_id.id
                 }
+                print(move.product_id.type)
                 vat.create(data)
                 print('get out')
 
@@ -111,6 +121,8 @@ class PurchasesLine(models.Model):
     _description = 'Purchase Code'
 
     vat_code_id = fields.Many2one('vat.configuration', string='VAT Code')
+    x_eligibility = fields.Selection([('true', 'Eligible'),
+        ('false', 'Ineligible')], string="VAT Eligibility")
 
     @api.onchange('vat_code_id')
     def get_tax_from_code(self):
@@ -166,12 +178,14 @@ class Purchases(models.Model):
                     'name': move.vat_code_id.name,
                     'partner_id': record.partner_id.id,
                     'tax_id': move.taxes_id.id,
-                    'base_amount': move.price_unit,
+                    'base_amount': move.price_subtotal,
                     'tax_amount': move.price_tax,
                     'vat_code_ref': move.vat_code_id.id,
-                    'reference': record.id,
+                    'purchase_reference': record.id,
                     'date': record.date_order,
-                    'category': 'Purchase'
+                    'category': 'Purchase',
+                    'eligibility': move.x_eligibility,
+                    'product_type': move.product_id.type
                 }
                 vat.create(data)
                 print('get out')
@@ -196,5 +210,14 @@ class Products(models.Model):
 
     x_is_zero = fields.Boolean(string="Is zero%")
     x_is_exmpted = fields.Boolean(string="Is exmpted%")
+
+
+
+class AccountMove(models.Model):
+    _inherit = 'account.move.line'
+    _description = 'Move Test'
+
+    x_vat_code = fields.Many2one('vat.configuration', string='VAT Code')
+
 
 
